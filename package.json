@@ -1,6 +1,6 @@
 {
   "name": "mw-graph-shared",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Shared code for Wikipedia's Graph extension and Graphoid Service",
   "main": "src/VegaWrapper.js",
   "scripts": {
@@ -14,7 +14,7 @@
   ],
   "author": "Yuri Astrakhan <YuriAstrakhan@gmail.com>",
   "dependencies": {
-    "domain-validator": "^0.0.5",
+    "domain-validator": "^0.0.3",
     "wd-type-parser": "^0.0.3"
   },
   "devDependencies": {
