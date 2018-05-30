@@ -321,13 +321,21 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 if (query.style && !/^[-_0-9a-z]+$/.test(query.style)) {
                     throw new Error('mapsnapshot: if style is given, it must be letters/numbers/dash/underscores only');
                 }
+                if (query.lang && !/^[-_0-9a-zA-Z]+$/.test(query.lang)) {
+                    throw new Error('mapsnapshot: if lang is given, it must be letters/numbers/dash/underscores only');
+                }
 
                 // Uses the same configuration as geoshape service, so reuse settings
                 this._validateExternalService(urlParts, sanitizedHost, opt.url, 'geoshape:');
 
                 urlParts.pathname = '/img/' + (query.style || 'osm-intl') + ',' + query.zoom + ',' +
                     query.lat + ',' + query.lon + ',' + query.width + 'x' + query.height + '@2x.png';
+
                 urlParts.query = {}; // deleting it would cause errors in mw.Uri()
+                if (query.lang) {
+                  urlParts.query.lang = query.lang;
+                }
+
                 break;
 
             default:
