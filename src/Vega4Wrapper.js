@@ -20,7 +20,7 @@ function uriToUrl(uri) {
     return url.substring(0, url.length-1);
 }
 
-class Vega5Wrapper {
+class Vega4Wrapper {
     /**
      * Shared library to wrap around vega code
      * @param {Object} wrapperOpts Configuration options
@@ -82,4 +82,4 @@ class Vega5Wrapper {
     }
 }
 
-module.exports = Vega5Wrapper;
+module.exports = Vega4Wrapper;
