@@ -5,7 +5,7 @@
  */
 function uriToUrl(uri) {
     let url = '';
-    url += uri.type === 'relative' ? uri.type + '://' : '//'; // whether use relative protocol
+    url += uri.type !== 'relative' ? uri.type + '://' : '//'; // whether use relative protocol
     if(uri.host) url += uri.host + (uri.port ? ':' + uri.port : '');
     if(url) url += '/'; // if url has protocol or host
     if(uri.path) url += uri.path.length > 0 && uri.path[0] === '/' ? uri.path.substring(1) : uri.path;
