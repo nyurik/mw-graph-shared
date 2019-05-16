@@ -508,33 +508,6 @@ describe('vega4Wrapper', function() {
         });
     }
 
-    it('sanitize - unsafe', async function () {
-        var wrapper = createWrapper(true),
-            pass = async function (url, expected) {
-                const result = await wrapper.sanitize(url, { domain: 'domain.sec.org' });
-                assert.equal(result.href, expected, JSON.stringify(url));
-            },
-            fail = async function (url) {
-                await expectError(async function () {
-                    return await wrapper.sanitize(url, {domain: 'domain.sec.org'});
-                }, url, ['Vega4Wrapper.sanitize']);
-            };
-
-        await fail({ type: 'nope', host: 'sec.org' });
-        await fail({ type: 'nope', host: 'sec' });
-
-        await pass({}, 'https://domain.sec.org');
-        await pass({ path: 'blah' }, 'https://domain.sec.org/blah');
-        await pass({ path: '/blah' }, 'https://domain.sec.org/blah');
-        await pass({ type: 'http', host: 'sec.org' }, 'http://sec.org/');
-        await pass({ type: 'http', host: 'sec.org', path: 'blah', test: 1}, 'http://sec.org/blah?test=1');
-        await pass({ type: 'http', host: 'any.sec.org' }, 'http://any.sec.org/');
-        await pass({ type: 'http', host: 'any.sec.org', path: 'blah', test: 1}, 'http://any.sec.org/blah?test=1');
-        await pass({ type: 'http', host: 'sec' }, 'http://sec.org/');
-        await pass({ type: 'http', host: 'sec', path: 'blah', test: 1}, 'http://sec.org/blah?test=1');
-
-    });
-
     it('sanitize - safe', async function () {
         var wrapper = createWrapper(false),
             pass = async function (url, expected, addCorsOrigin) {
@@ -693,7 +666,7 @@ describe('vega4Wrapper', function() {
             };
 
         await fail({type:'wikiapi', host:'sec.org', a:1});
-        await fail('wikirest:///api/abc');
+        await fail({type:'wikirest', path:'/api/abc'});
         //await fail('///My%20page?foo=1');
 
         await pass({type:'wikititle', path:'My page'}, 'https://domain.sec.org/wiki/My_page');

@@ -5,7 +5,7 @@
  */
 function uriToUrl(uri) {
     let url = '';
-    if(uri.type) url += uri.type + '://'; // whether use relative protocol
+    url += uri.type === 'relative' ? uri.type + '://' : '//'; // whether use relative protocol
     if(uri.host) url += uri.host + (uri.port ? ':' + uri.port : '');
     if(url) url += '/'; // if url has protocol or host
     if(uri.path) url += uri.path.length > 0 && uri.path[0] === '/' ? uri.path.substring(1) : uri.path;
@@ -68,8 +68,15 @@ class Vega4Wrapper {
     sanitize(uri, options) {
         var vwProto = this.vwProto;
         return new Promise(function(accept) {
-            if(uri === null) {
-                throw new Error("URI can't be null");
+            if(!uri || !uri.type) {
+                if(typeof window === 'undefined') { //in node.js env
+                    throw new Error("Invalid URI");
+                } else { // if the target is on the current host // in the browser
+                    uri.type = 'relative';
+                }
+            }
+            if(/https?/.test(uri.type) && options.type !== 'open') {
+                throw new Error("HTTP and HTTPS protocols are not supported");
             }
             options.url = uriToUrl(uri);
             
