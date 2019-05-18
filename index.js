@@ -1,2 +1,4 @@
-module.exports = require('./src/VegaWrapper.js');
-module.exports.v4 = require('./src/Vega4Wrapper.js');
+module.exports = {
+    wrapper1: require('./src/VegaWrapper.js'),
+    wrapper2: require('./src/VegaWrapper2.js')
+};

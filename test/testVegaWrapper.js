@@ -5,7 +5,7 @@ var assert = require('assert'),
     util = require('util'),
     urllib = require('url'),
     VegaWrapper = require('../src/VegaWrapper'),
-    Vega4Wrapper = require('../src/Vega4Wrapper');
+    VegaWrapper2 = require('../src/VegaWrapper2');
 
 describe('vegaWrapper', function() {
 
@@ -419,7 +419,7 @@ describe('vegaWrapper', function() {
 
 });
 
-describe('vega4Wrapper', function() {
+describe('vegaWrapper2', function() {
     function expectError(testFunc, msg, errFuncNames) {
         var error, result;
         msg = JSON.stringify(msg);
@@ -452,7 +452,6 @@ describe('vega4Wrapper', function() {
         wikiapi: ['wikiapi.nonsec.org', 'wikiapi.sec.org'],
         wikirest: ['wikirest.nonsec.org', 'wikirest.sec.org'],
         wikiraw: ['wikiraw.nonsec.org', 'wikiraw.sec.org'],
-        wikirawupload: ['wikirawupload.nonsec.org', 'wikirawupload.sec.org'],
         wikidatasparql: ['wikidatasparql.nonsec.org', 'wikidatasparql.sec.org'],
         geoshape: ['maps.nonsec.org', 'maps.sec.org']
     };
@@ -461,21 +460,17 @@ describe('vega4Wrapper', function() {
         'sec': 'sec.org'
     };
 
-    function createWrapper() {
-        return new Vega4Wrapper({
+    var wrapper = new VegaWrapper2({
             loader: {},
-            extend: _.extend,
             domains: domains,
             domainMap: domainMap,
             logger: function (msg) { throw new Error(msg); },
             formatUrl: urllib.format,
             languageCode: 'en'
         });
-    }
 
-    it('sanitize', async function () {
-        var wrapper = createWrapper(),
-            pass = function (url, expected, addCorsOrigin) {
+    describe('sanitize', function () {
+        var pass = function (url, expected, addCorsOrigin) {
                 var opt = {domain: 'domain.sec.org'};
                 const result = wrapper.objToUrl(url, opt);
                 assert.equal(result, expected, JSON.stringify(url));
@@ -487,152 +482,143 @@ describe('vega4Wrapper', function() {
             fail = function (url) {
                 expectError(function () {
                     return wrapper.objToUrl(url, {domain: 'domain.sec.org'});
-                }, url, ['Vega4Wrapper.objToUrl', 'VegaWrapper._validateExternalService']);
+                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper._validateExternalService']);
             };
 
-        fail({});
-        fail({ path: 'blah' });
-        fail({ type: 'nope', host: 'sec.org' });
-        fail({ type: 'nope', host: 'sec' });
-        fail({ type: 'https', host: 'sec.org' });
-        fail({ type: 'https', host: 'sec' });
-/*
-        // wikiapi allows sub-domains
-        passWithCors({type:'wikiapi', host:'sec.org', a:'1'}, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
-        passWithCors({type:'wikiapi', host:'wikiapi.sec.org', a:'1'}, 'https://wikiapi.sec.org/w/api.php?a=1&format=json&formatversion=2');
-        passWithCors({type:'wikiapi', host:'sec', a:'1'}, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
-        passWithCors({type:'wikiapi', host:'nonsec.org', a:'1'}, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
-        passWithCors({type:'wikiapi', host:'wikiapi.nonsec.org', a:'1'}, 'http://wikiapi.nonsec.org/w/api.php?a=1&format=json&formatversion=2');
-        passWithCors({type:'wikiapi', host:'nonsec', a:'1'}, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+        it('error type', function () {
+            fail({});
+            fail({ path: 'blah' });
+            fail({ type: 'blah', title: 'MyPage' });
+            fail({ type: 'nope', host: 'sec.org' });
+            fail({ type: 'nope', host: 'sec' });
+            fail({ type: 'https', host: 'sec.org' });
+            fail({ type: 'https', host: 'sec' });
+        });
 
-        // wikirest allows sub-domains, requires path to begin with "/api/"
-        fail({type:'wikirest', host:'sec.org'});
-        pass({type:'wikirest', path:'/api/abc'}, 'https://domain.sec.org/api/abc');
-        pass({type:'wikirest', host:'sec.org', path:'/api/abc'}, 'https://sec.org/api/abc');
-        pass({type:'wikirest', host:'sec', path:'/api/abc'}, 'https://sec.org/api/abc');
-        pass({type:'wikirest', host:'wikirest.sec.org', path:'/api/abc'}, 'https://wikirest.sec.org/api/abc');
-        pass({type:'wikirest', host:'wikirest.nonsec.org', path:'/api/abc'}, 'http://wikirest.nonsec.org/api/abc');
+        it('wikiapi', function () {
+            // wikiapi allows sub-domains
+            fail({ type: 'wikiapi', wiki: 'sec.org', });
+            fail({ type: 'wikiapi', wiki: 'sec.org', params: 'blah'});
+            passWithCors({ type: 'wikiapi', params:{a: '1'} }, 'https://domain.sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec.org', params:{a: 1} }, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'wikiapi.sec.org', params:{a: '1'} }, 'https://wikiapi.sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec', params:{a: '1'} }, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'nonsec.org', params:{a: 1} }, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'wikiapi.nonsec.org', params:{a: '1'} }, 'http://wikiapi.nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'nonsec', params:{a: '1'} }, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+        });
 
-        // wikiraw allows sub-domains
-        fail({type:'wikiraw', host:'sec.org'});
-        fail({type:'wikiraw', host:'sec.org', a:10});
-        fail({type:'wikiraw', host:'asec.org', path:'aaa'});
-        fail({type:'wikiraw', path:'abc|xyz'});
-        fail({type:'wikiraw', path:'/abc|xyz'});
-        fail({type:'wikiraw', host:'sec.org', path:'abc|xyz'});
-        passWithCors({type:'wikiraw', path:'abc'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
-        passWithCors({type:'wikiraw', path:'/abc'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
-        passWithCors({type:'wikiraw', path:'abc/xyz'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fxyz');
-        passWithCors({type:'wikiraw', host:'sec.org', path:'aaa'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
-        passWithCors({type:'wikiraw', host:'sec.org', path:'aaa', a:10}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
-        passWithCors({type:'wikiraw', host:'sec.org', path:'abc/def'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fdef');
-        passWithCors({type:'wikiraw', host:'sec', path:'aaa'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
-        passWithCors({type:'wikiraw', host:'sec', path:'abc/def'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fdef');
-        passWithCors({type:'wikiraw', host:'wikiraw.sec.org', path:'abc'}, 'https://wikiraw.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
+        it('wikirest', function () {
+            // wikirest allows sub-domains, requires path to begin with "/api/"
+            fail({ type: 'wikirest', wiki: 'sec.org' });
+            pass({ type: 'wikirest', path: '/abc' }, 'https://domain.sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'sec.org', path: '/abc' }, 'https://sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'sec', path: '/abc' }, 'https://sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'wikirest.sec.org', path: '/abc' }, 'https://wikirest.sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'wikirest.nonsec.org', path: '/abc' }, 'http://wikirest.nonsec.org/api/abc');
+        });
 
-        fail({type:'wikirawupload', host:'sec.org'});
-        fail({type:'wikirawupload', host:'sec.org', path: 'a'});
-        fail({type:'wikirawupload', host:'sec.org', a:10});
-        fail({type:'wikirawupload', host:'asec.org', path: 'aaa'});
-        pass({type:'wikirawupload', path: 'aaa'}, 'http://wikirawupload.nonsec.org/aaa');
-        pass({type:'wikirawupload', path: 'aaa/bbb'}, 'http://wikirawupload.nonsec.org/aaa/bbb');
-        pass({type:'wikirawupload', path: 'aaa', a:1}, 'http://wikirawupload.nonsec.org/aaa');
-        pass({type:'wikirawupload', host:'wikirawupload.nonsec.org', path: 'aaa'}, 'http://wikirawupload.nonsec.org/aaa');
-        fail({type:'wikirawupload', host:'blah.nonsec.org', path: 'aaa'});
-        fail({type:'wikirawupload', host:'a.wikirawupload.nonsec.org', path: 'aaa'});
+        it('wikiraw', function () {
+            // wikiraw allows sub-domains
+            fail({ type: 'wikiraw', wiki: 'sec.org' });
+            fail({ type: 'wikiraw', wiki: 'sec.org', a: 10 });
+            fail({ type: 'wikiraw', wiki: 'asec.org', title: 'aaa' });
+            fail({ type: 'wikiraw', title: 'abc|xyz' });
+            fail({ type: 'wikiraw', wiki: 'sec.org', title: 'abc|xyz' });
+            passWithCors({ type: 'wikiraw', title: 'abc' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
+            passWithCors({ type: 'wikiraw', title: 'abc/xyz' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fxyz');
+            passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'aaa' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
+            passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'aaa', a: 10 }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
+            passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'abc/def' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fdef');
+            passWithCors({ type: 'wikiraw', wiki: 'sec', title: 'aaa' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
+            passWithCors({ type: 'wikiraw', wiki: 'sec', title: 'abc/def' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fdef');
+            passWithCors({ type: 'wikiraw', wiki: 'wikiraw.sec.org', title: 'abc' }, 'https://wikiraw.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
+        });
 
-        fail({type:'wikidatasparql', host:'sec.org'});
-        fail({type:'wikidatasparql', host:'sec.org', path:'a'});
-        fail({type:'wikidatasparql', host:'sec.org', a:10});
-        fail({type:'wikidatasparql', host:'asec.org', path:'aaa'});
-        fail({type:'wikidatasparql', host:'asec.org', query:1});
-        fail({type:'wikidatasparql', path:'aaa'});
-        fail({type:'wikidatasparql', path:'aaa', aquery:1});
-        fail({type:'wikidatasparql', aquery:1});
-        pass({type:'wikidatasparql', query:1}, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
-        pass({type:'wikidatasparql', path:'aaa', query:1}, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
-        pass({type:'wikidatasparql', host:'wikidatasparql.sec.org', query:1}, 'https://wikidatasparql.sec.org/bigdata/namespace/wdq/sparql?query=1');
-        pass({type:'wikidatasparql', host:'wikidatasparql.sec.org', query:1, blah:2}, 'https://wikidatasparql.sec.org/bigdata/namespace/wdq/sparql?query=1');
+        it('wikifile', function () {
+            pass({ type: 'wikifile', title: 'Einstein_1921.jpg' }, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg');
+            pass({ type: 'wikifile', title: 'Einstein_1921.jpg', width: 10 }, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg?width=10');
+        });
 
-        fail({type:'geoshape', host:'sec.org'});
-        fail({type:'geoshape', host:'sec.org', path:'a'});
-        fail({type:'geoshape', host:'sec.org', path:'/a'});
-        fail({type:'geoshape', host:'sec.org', a:10});
-        fail({type:'geoshape', host:'asec.org', path:'aaa'});
-        fail({type:'geoshape', path:'aaa'});
-        fail({type:'geoshape', aquery:1});
-        pass({type:'geoshape', ids:1}, 'http://maps.nonsec.org/geoshape?ids=1');
-        pass({type:'geoshape', host:'maps.sec.org', ids:'a1,b4'}, 'https://maps.sec.org/geoshape?ids=a1%2Cb4');
+        it('wikidatasparql', function () {
+            fail({ type: 'wikidatasparql'});
+            fail({ type: 'wikidatasparql', path: 'a' });
+            fail({ type: 'wikidatasparql', a: 10 });
+            fail({ type: 'wikidatasparql', aquery: 1 });
+            pass({ type: 'wikidatasparql', query: 1 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            pass({ type: 'wikidatasparql', path: 'aaa', query: 1 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            pass({ type: 'wikidatasparql', query: 1, blah: 2 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+        });
 
-        fail({type:'geoline', host:'sec.org'});
-        fail({type:'geoline', host:'sec.org', path:'a'});
-        fail({type:'geoline', host:'sec.org', path:'/a'});
-        fail({type:'geoline', host:'sec.org', a:10});
-        fail({type:'geoline', host:'asec.org', path:'aaa'});
-        fail({type:'geoline', path:'aaa'});
-        fail({type:'geoline', aquery:1});
-        pass({type:'geoline', ids:1}, 'http://maps.nonsec.org/geoline?ids=1');
-        pass({type:'geoline', host:'maps.sec.org', ids:'a1,b4'}, 'https://maps.sec.org/geoline?ids=a1%2Cb4');
+        it('geoshape', function () {
+            fail({ type: 'geoshape'});
+            fail({ type: 'geoshape', a: 10 });
+            fail({ type: 'geoshape', host: 'sec.org', path: '/a' });
+            fail({ type: 'geoshape', host: 'sec.org', title: 'a' });
+            fail({ type: 'geoshape', host: 'asec.org', path: 'aaa' });
+            fail({ type: 'geoshape', title: 'aaa' });
+            fail({ type: 'geoshape', aquery: 1 });
+            pass({ type: 'geoshape', ids: 1 }, 'http://maps.nonsec.org/geoshape?ids=1');
+            pass({ type: 'geoshape', ids: 'a1,b4' }, 'http://maps.nonsec.org/geoshape?ids=a1%2Cb4');
+            pass({ type: 'geoshape', query: 1 }, 'http://maps.nonsec.org/geoshape?query=1');
+        });
 
-        pass({type:'wikifile', path:'Einstein_1921.jpg'}, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg');
-        pass({type:'wikifile', path:'Einstein_1921.jpg', width:10}, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg?width=10');
-        pass({type:'wikifile', host:'sec.org', path:'Einstein_1921.jpg'}, 'https://sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg');
+        it('geoline', function () {
+            fail({ type: 'geoline', host: 'sec.org' });
+            fail({ type: 'geoline', a: 10 });
+            fail({ type: 'geoline', host: 'sec.org', path: '/a' });
+            fail({ type: 'geoline', host: 'sec.org', title: 'a' });
+            fail({ type: 'geoline', host: 'asec.org', path: 'aaa' });
+            fail({ type: 'geoline', title: 'aaa' });
+            fail({ type: 'geoline', aquery: 1 });
+            pass({ type: 'geoline', ids: 1 }, 'http://maps.nonsec.org/geoline?ids=1');
+            pass({ type: 'geoline', ids: 'a1,b4' }, 'http://maps.nonsec.org/geoline?ids=a1%2Cb4');
+            pass({ type: 'geoline', query: 1 }, 'http://maps.nonsec.org/geoline?query=1');
+        });
 
-        fail({type:'mapsnapshot', host:'sec.org'});
-        fail({type:'mapsnapshot', width:100});
-        fail({type:'mapsnapshot', width:100, height:100, lat:10, lon:10, zoom:5, style:'@4'});
-        fail({type:'mapsnapshot', width:100, height:100, lat:10, lon:10, zoom:5, style:'a$b'});
-        fail({type:'mapsnapshot', width:100, height:100, lat:10, lon:10, zoom:5, lang:'a$b'});
-        pass({type:'mapsnapshot', width:100, height:100, lat:10, lon:10, zoom:5}, 'http://maps.nonsec.org/img/osm-intl,5,10,10,100x100@2x.png');
-        pass({type:'mapsnapshot', width:100, height:100, lat:10, lon:10, zoom:5, style:'osm'}, 'http://maps.nonsec.org/img/osm,5,10,10,100x100@2x.png');
-        pass({type:'mapsnapshot', width:100, height:100, lat:10, lon:10, zoom:5, style:'osm', lang:'local'}, 'http://maps.nonsec.org/img/osm,5,10,10,100x100@2x.png?lang=local');
-*/
-        fail({type:'tabular', host:'sec.org'});
-        fail({type:'tabular', host:'sec.org', path: '/'});
-        fail({type:'tabular', host:'sec.org', a:10});
-        fail({type:'tabular', host:'asec.org', path:'aaa.tab'});
-        fail({type:'tabular', path:'abc|xyz.tab'});
-        fail({type:'tabular', host:'sec.org', path:'abc|xyz.tab'});
-        passWithCors({type:'tabular', path:'/abc.tab'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.tab&uselang=en');
-        passWithCors({type:'tabular', path:'abc/xyz.tab'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fxyz.tab&uselang=en');
-        passWithCors({type:'tabular', host:'sec.org', path:'aaa.tab'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.tab&uselang=en');
-        passWithCors({type:'tabular', host:'sec.org', path:'aaa.tab', a:10}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.tab&uselang=en');
-        passWithCors({type:'tabular', host:'sec.org', path:'abc/def.tab'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fdef.tab&uselang=en');
-        passWithCors({type:'tabular', host:'sec', path:'/aaa.tab'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.tab&uselang=en');
-        passWithCors({type:'tabular', host:'sec', path:'abc/def.tab'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fdef.tab&uselang=en');
-        passWithCors({type:'tabular', host:'wikiraw.sec.org', path:'abc.tab'}, 'https://wikiraw.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.tab&uselang=en');
+        it('mapsnapshot', function () {
+            fail({ type: 'mapsnapshot' });
+            fail({ type: 'mapsnapshot', width: 100 });
+            fail({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: '@4' });
+            fail({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: 'a$b' });
+            fail({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, lang: 'a$b' });
+            pass({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5 }, 'http://maps.nonsec.org/img/osm-intl,5,10,10,100x100@2x.png');
+            pass({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: 'osm' }, 'http://maps.nonsec.org/img/osm,5,10,10,100x100@2x.png');
+            pass({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: 'osm', lang: 'local' }, 'http://maps.nonsec.org/img/osm,5,10,10,100x100@2x.png?lang=local');
+        });
 
-        fail({type:'map', host:'sec.org'});
-        fail({type:'map', host:'sec.org', path: '/'});
-        fail({type:'map', host:'sec.org', a:10});
-        fail({type:'map', host:'asec.org', path:'aaa.map'});
-        fail({type:'map', path:'abc|xyz.map'});
-        fail({type:'map', host:'sec.org', path:'abc|xyz.map'});
-        passWithCors({type:'map', path:'/abc.map'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.map&uselang=en');
-        passWithCors({type:'map', path:'/abc/xyz.map'}, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fxyz.map&uselang=en');
-        passWithCors({type:'map', host:'sec.org', path:'/aaa.map'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.map&uselang=en');
-        passWithCors({type:'map', host:'sec.org', path:'/aaa.map', a:10}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.map&uselang=en');
-        passWithCors({type:'map', host:'sec.org', path:'/abc/def.map'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fdef.map&uselang=en');
-        passWithCors({type:'map', host:'sec', path:'/aaa.map'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.map&uselang=en');
-        passWithCors({type:'map', host:'sec', path:'/abc/def.map'}, 'https://sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fdef.map&uselang=en');
-        passWithCors({type:'map', host:'wikiraw.sec.org', path:'/abc.map'}, 'https://wikiraw.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.map&uselang=en');
+        it('tabular', function () {
+            fail({ type: 'tabular' });
+            fail({ type: 'tabular', a: 10 });
+            fail({ type: 'tabular', title: 'abc|xyz.tab' });
+            passWithCors({ type: 'tabular', title: 'abc.tab' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.tab&uselang=en');
+            passWithCors({ type: 'tabular', title: 'abc/xyz.tab' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fxyz.tab&uselang=en');
+            passWithCors({ type: 'tabular', title: 'aaa.tab', a: 10 }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.tab&uselang=en');
+        });
+
+        it('map', function () {
+            fail({ type: 'map' });
+            fail({ type: 'map', a: 10 });
+            fail({ type: 'map', title: 'abc|xyz.map' });
+            passWithCors({ type: 'map', title: 'abc.map' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.map&uselang=en');
+            passWithCors({ type: 'map', title: 'abc/xyz.map' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fxyz.map&uselang=en');
+            passWithCors({ type: 'map', title: 'aaa.map', a: 10 }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.map&uselang=en');
+        });
     });
 
-    /*
     it('sanitize for type=open', function () {
-        var wrapper = createWrapper(),
-            pass = function (url, expected) {
+        var pass = function (url, expected) {
                 const result = wrapper.objToUrl(url, {type: 'open', domain: 'domain.sec.org'});
                 assert.equal(result, expected, JSON.stringify(url));
             },
             fail = function (url) {
                 expectError(function () {
                     return wrapper.objToUrl(url, {type: 'open', domain: 'domain.sec.org'});
-                }, url, ['Vega4Wrapper.objToUrl', 'VegaWrapper._validateExternalService']);
+                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper._validateExternalService']);
             };
 
-        fail({type:'wikiapi', host:'sec.org', a:1});
-        fail({type:'wikirest', path:'/api/abc'});
+        fail({type:'wikiapi', a:1});
+        fail({type:'wikirest', path:'/abc'});
         //fail('///My%20page?foo=1');
 
         pass({type:'wikititle', path:'My page'}, 'https://domain.sec.org/wiki/My_page');
@@ -652,38 +638,44 @@ describe('vega4Wrapper', function() {
         fail({type:'https', path:'/w/Http page'});
         fail({type:'https', path:'/wiki/Http page', a:1});
     });
-*/
 
-    it('parseResponse', function () {
-            var wrapper = createWrapper(),
-                pass = function (expected, data, type, dontEncode) {
-                    assert.deepStrictEqual(
-                        wrapper.parseResponse(
-                            dontEncode ? data : JSON.stringify(data),
-                            type),
-                        expected)
-                },
-                fail = function (data, type) {
-                    expectError(function () {
-                        return wrapper.parseResponse(data, type);
-                    }, type, ['VegaWrapper.parseResponse']);
-                };
+    describe('parseResponse', function () {
+        var pass = function (expected, data, type, dontEncode) {
+            assert.deepStrictEqual(
+                wrapper.parseResponse(
+                    dontEncode ? data : JSON.stringify(data),
+                    type),
+                expected)
+            },
+            fail = function (data, type) {
+                expectError(function () {
+                    return wrapper.parseResponse(data, type);
+                }, type, ['VegaWrapper2.parseResponse']);
+            };
 
+        it('dontEncode', function () {
             pass(1, 1, 'test:', true);
-/*
-            fail({error: 'blah'}, 'wikiapi:');
-            pass({blah: 1}, {blah: 1}, 'wikiapi:');
+        });
 
-            fail({error: 'blah'}, 'wikiraw:');
-            fail({blah: 1}, 'wikiraw:');
-            pass('blah', {query: {pages: [{revisions: [{content: 'blah'}]}]}}, 'wikiraw:');
+        it('wikiapi', function () {
+            fail({ error: 'blah' }, 'wikiapi');
+            pass({ blah: 1 }, { blah: 1 }, 'wikiapi');
+        });
 
-            fail({error: 'blah'}, 'wikidatasparql:');
-            fail({blah: 1}, 'wikidatasparql:');
-            fail({results: false}, 'wikidatasparql:');
-            fail({results: {bindings: false}}, 'wikidatasparql:');
-            pass([], {results: {bindings: []}}, 'wikidatasparql:');
-            pass([{int: 42, float: 42.5, geo: [42, 144.5]}, {uri: 'Q42'}], {
+        it('wikiraw', function () {
+            fail({ error: 'blah' }, 'wikiraw');
+            fail({ blah: 1 }, 'wikiraw');
+            pass('blah', { query: { pages: [{ revisions: [{ content: 'blah' }] }] } }, 'wikiraw');
+        });
+
+        it('wikidatasparql', function () {
+            fail({ error: 'blah' }, 'wikidatasparql');
+            fail({ blah: 1 }, 'wikidatasparql');
+            fail({ results: false }, 'wikidatasparql');
+            fail({ results: { bindings: false } }, 'wikidatasparql');
+            fail({ results: { bindings: 100 } }, 'wikidatasparql');
+            pass([], { results: { bindings: [] } }, 'wikidatasparql');
+            pass([{ int: 42, float: 42.5, geo: [42, 144.5] }, { uri: 'Q42' }], {
                 results: {
                     bindings: [{
                         int: {
@@ -708,54 +700,58 @@ describe('vega4Wrapper', function() {
                         }
                     }]
                 }
-            }, 'wikidatasparql:');
-*/
+            }, 'wikidatasparql');
+        });
+
+        it('tabular', function () {
             pass({
-                    meta: [{
-                        description: 'desc',
-                        license_code: 'CC0-1.0+',
-                        license_text: 'abc',
-                        license_url: 'URL',
-                        sources: 'src'
-                    }],
-                    fields: [{name: 'fld1'}],
-                    data: [{fld1: 42}]
-                },
+                meta: [{
+                    description: 'desc',
+                    license_code: 'CC0-1.0+',
+                    license_text: 'abc',
+                    license_url: 'URL',
+                    sources: 'src'
+                }],
+                fields: [{ name: 'fld1' }],
+                data: [{ fld1: 42 }]
+            },
                 {
                     jsondata: {
                         description: 'desc',
                         sources: 'src',
-                        license: {code: 'CC0-1.0+', text: 'abc', url: 'URL'},
-                        schema: {fields: [{name: 'fld1'}]},
+                        license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
+                        schema: { fields: [{ name: 'fld1' }] },
                         data: [[42]]
                     },
                 }, 'tabular');
+        });
 
+        it('map', function () {
             pass({
-                    meta: [{
-                        description: 'desc',
-                        license_code: 'CC0-1.0+',
-                        license_text: 'abc',
-                        license_url: 'URL',
-                        sources: 'src',
-                        longitude: 10,
-                        latitude: 20,
-                        zoom: 3,
-                    }],
-                    data: "map"
-                },
+                meta: [{
+                    description: 'desc',
+                    license_code: 'CC0-1.0+',
+                    license_text: 'abc',
+                    license_url: 'URL',
+                    sources: 'src',
+                    longitude: 10,
+                    latitude: 20,
+                    zoom: 3,
+                }],
+                data: "map"
+            },
                 {
                     jsondata: {
                         description: 'desc',
                         sources: 'src',
-                        license: {code: 'CC0-1.0+', text: 'abc', url: 'URL'},
+                        license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
                         longitude: 10,
                         latitude: 20,
                         zoom: 3,
                         data: "map"
                     },
                 }, 'map');
-        }
-    );
+        });
+    });
 
 });
