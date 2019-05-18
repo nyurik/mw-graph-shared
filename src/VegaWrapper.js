@@ -229,7 +229,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 // Query value must be a valid MediaWiki title string, but we only ensure
                 // there is no pipe symbol, the rest is handled by the api.
                 decodedPathname = decodeURIComponent(urlParts.pathname);
-                if (!/^\/[^|]+$/.test(decodedPathname)) {
+                if (!/^\/[^|\x1F]+$/.test(decodedPathname)) {
                     throw new Error(urlParts.protocol + ' invalid title');
                 }
                 if (urlParts.protocol === 'wikiraw:') {
