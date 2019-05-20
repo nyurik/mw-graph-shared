@@ -1,16 +1,17 @@
 const makeValidator = require('domain-validator'),
       parseWikidataValue = require('wd-type-parser');
 
-function validate(value, name, min, max, isFloat) {
+function validate(urlObj, name, min, max, isFloat) {
+    let value = urlObj[name];
     if (value === undefined) {
-        throw new Error('mapsnapshot: parameter ' + name + ' is not set');
+        throw new Error(urlObj.type + ': parameter ' + name + ' is not set');
     }
     if (!(isFloat ? /^-?[0-9]+\.?[0-9]*$/ : /^-?[0-9]+$/).test(value)) {
-        throw new Error('mapsnapshot: parameter ' + name + ' is not a number');
+        throw new Error(urlObj.type + ': parameter ' + name + ' is not a number');
     }
     value = isFloat ? parseFloat(value) : parseInt(value);
     if (value < min || value > max) {
-        throw new Error('mapsnapshot: parameter ' + name + ' is not valid');
+        throw new Error(urlObj.type + ': parameter ' + name + ' is not valid');
     }
 }
 
@@ -53,7 +54,7 @@ class VegaWrapper2 {
      * @return {Promise} The sanitized url is provided by the 'href' property. We never load file from local file system.
      */
     sanitize(uri, options) {
-        return new Promise(function(accept) {
+        return new Promise(accept => {
             //return
             accept({href: this.objToUrl(uri, options), loadFile: false});
         });
@@ -122,34 +123,38 @@ class VegaWrapper2 {
      * @returns {string} a complete url
      */
     objToUrl(urlObj, options) {
-        let urlParts = {host: urlObj.wiki ? urlObj.wiki : options.domain},
-            sanitizedHost = this.sanitizeHost(urlParts.host);
+        const sanitizedHost = this.sanitizeHost(urlObj.wiki ? urlObj.wiki : options.domain);
 
         if (!sanitizedHost) {
             throw new Error('URL hostname is not whitelisted: ' + urlParts.host);
         }
-        Object.assign(urlParts, sanitizedHost);
+        const urlParts = {
+            host: sanitizedHost.host,
+            protocol: sanitizedHost.protocol,
+            query: {}
+        };
 
         switch(urlObj.type) {
             case 'wikiapi':
-                // {type: “wikiapi”, params: {action:”...”, ... } [, wiki: “en.wikipedia.org”]}
-                // Call to api.php - ignores the path parameter, and only uses the query
-                if(typeof urlObj.params !== 'object'){
+                // {type: “wikiapi”, params: {action:”...”, ...} [, wiki: “en.wikipedia.org”]}
+                // Call to api.php - the *params* are converted into the url query string
+                // use *wiki* to designate the host
+                if(!urlObj.params || typeof urlObj.params !== 'object'){
                     throw new Error('wikiapi: "params" should be an object');
                 }
-                urlParts.query = Object.assign(urlObj.params, {format: 'json', formatversion: '2'});
+                Object.assign(urlParts.query, urlObj.params, {format: 'json', formatversion: '2'});
                 urlParts.pathname = '/w/api.php';
                 options.addCorsOrigin = true;
                 break;
 
             case 'wikirest':
                 // {type: “wikirest”, path: “/rest_v1/page/...” [, wiki: “en.wikipedia.org”]}
-                // Call to RESTbase api - requires the path to start with "/api/"
+                // Call to RESTbase api - will add "/api" in front of *path* automatically
                 // The /api/... path is safe for GET requests
-                if (!urlObj.path || !urlObj.path.startsWith('/')) {
-                    throw new Error('wikirest: url path should begin with "/"');
+                if (!urlObj.path) {
+                    throw new Error('wikirest: url path can\'t be empty');
                 }
-                urlParts.pathname = '/api' + urlObj.path;
+                urlParts.pathname = (urlObj.path.startsWith('/') ? '/api' : '/api/') + urlObj.path;
                 break;
 
             case 'wikiraw':
@@ -159,7 +164,7 @@ class VegaWrapper2 {
                 // Query value must be a valid MediaWiki title string, but we only ensure
                 // there is no pipe symbol or \x1F, the rest is handled by the api.
                 if (!urlObj.title || !/^[^|\x1F]+$/.test(urlObj.title)) {
-                    throw new Error('wikiraw: invalid title');
+                    throw new Error('wikiraw: invalid title' + JSON.stringify(urlObj));
                 }
                 urlParts.query = {
                     format: 'json',
@@ -182,8 +187,13 @@ class VegaWrapper2 {
                 // Uses mediawiki api, and extract the content after the request
                 // Query value must be a valid MediaWiki title string, so we ensure there
                 // is no pipe symbol or \x1F and the title ends with .tab or .map
-                if (!/^[^|\x1F]+\.(tab|map)$/.test(urlObj.title)) {
-                    throw new Error(urlObj.type + ': invalid title');
+                if (urlObj.type === 'map') {
+                    if (!/^[^|\x1F]+\.map$/.test(urlObj.title)) {
+                        throw new Error('map: invalid title' + JSON.stringify(urlObj));
+                    }
+                } 
+                else if(!/^[^|\x1F]+\.tab$/.test(urlObj.title)) {
+                    throw new Error('tabular: invalid title' + JSON.stringify(urlObj));
                 }
                 urlParts.query = {
                     format: 'json',
@@ -202,10 +212,18 @@ class VegaWrapper2 {
             case 'wikifile':
                 // {type: “wikifile”, title: “Einstein_1921.jpg”, [width=100, height=100]}
                 // Get an image for the graph, e.g. from commons, by using Special:Redirect
+                if (!urlObj.title || !/^[^|\x1F]+$/.test(urlObj.title)) {
+                    throw new Error('wikifile: invalid title' + JSON.stringify(urlObj));
+                }
                 urlParts.pathname = '/wiki/Special:Redirect/file/' + urlObj.title;
-                urlParts.query = {};
-                if(urlObj.width) urlParts.query.width = urlObj.width;
-                if(urlObj.height) urlParts.query.height = urlObj.height;
+                if(urlObj.width) {
+                    validate(urlObj, 'width', 0, Infinity);
+                    urlParts.query.width = urlObj.width;
+                }
+                if(urlObj.height) {
+                    validate(urlObj, 'height', 0, Infinity);
+                    urlParts.query.height = urlObj.height;
+                }
                 break;
 
             case 'wikidatasparql':
@@ -223,7 +241,7 @@ class VegaWrapper2 {
 
             case 'geoshape':
             case 'geoline':
-                // {type: “geoshape”, [ids: “Q16,Q30” | query:’...’] }
+                // {type: “geoshape”, [ids: ["Q16","Q30"] | query:"..."] }
                 // Get geoshapes data from OSM database by supplying Wikidata IDs
                 // https://maps.wikimedia.org/shape?ids=Q16,Q30
                 // 'geoline:' is an identical service, except that it returns lines instead of polygons
@@ -231,9 +249,20 @@ class VegaWrapper2 {
                 if (!urlObj.ids && !urlObj.query) {
                     throw new Error(urlObj.type + ' missing ids or query parameter in: ' + JSON.stringify(urlObj));
                 }
-                urlParts.query = {};
-                if(urlObj.ids) urlParts.query.ids = urlObj.ids;
-                else if(urlObj.query) urlParts.query.query = urlObj.query;
+                if(urlObj.ids) {
+                    const ids = urlObj.ids;
+                    if(ids.length !== 2 || // is an array of length 2
+                        !/^Q[1-9][0-9]{0,15}$/.test(ids[0]) || !/^Q[1-9][0-9]{0,15}$/.test(ids[1])) {
+                        throw new Error(urlObj.type + ': invalid ids - ' + JSON.stringify(urlObj));
+                    }
+                    urlParts.query.ids = ids.join(',');
+                }
+                else {
+                    if(!urlObj.query || typeof urlObj.query !== 'string') {
+                        throw new Error(urlObj.type + ': query should be a non-empty string\n' + JSON.stringify(urlObj));
+                    }
+                    urlParts.query.query = urlObj.query;
+                }
                 urlParts.pathname = '/' + urlObj.type;
                 break;
 
@@ -242,11 +271,11 @@ class VegaWrapper2 {
                 // Converts it into a snapshot image request for Kartotherian:
                 // https://maps.wikimedia.org/img/{style},{zoom},{lat},{lon},{width}x{height}[@{scale}x].{format}
                 // (scale will be set to 2, and format to png)
-                validate(urlObj.width, 'width', 1, 4096);
-                validate(urlObj.height, 'height', 1, 4096);
-                validate(urlObj.zoom, 'zoom', 0, 22);
-                validate(urlObj.lat, 'lat', -90, 90, true);
-                validate(urlObj.lon, 'lon', -180, 180, true);
+                validate(urlObj, 'width', 1, 4096);
+                validate(urlObj, 'height', 1, 4096);
+                validate(urlObj, 'zoom', 0, 22);
+                validate(urlObj, 'lat', -90, 90, true);
+                validate(urlObj, 'lon', -180, 180, true);
 
                 if (urlObj.style && !/^[-_0-9a-z]+$/.test(urlObj.style)) {
                     throw new Error('mapsnapshot: if style is given, it must be letters/numbers/dash/underscores only');
@@ -258,12 +287,10 @@ class VegaWrapper2 {
                 // Uses the same configuration as geoshape service, so reuse settings
                 this._overrideHostAndProtocol(urlParts, urlObj, 'geoshape');
 
-                urlParts.pathname = '/img/' + (urlObj.style || 'osm-intl') + ',' + urlObj.zoom + ',' +
-                    urlObj.lat + ',' + urlObj.lon + ',' + urlObj.width + 'x' + urlObj.height + '@2x.png';
+                urlParts.pathname = `/img/${urlObj.style || 'osm-intl'},${urlObj.zoom},${urlObj.lat},${urlObj.lon},${urlObj.width}x${urlObj.height}@2x.png`;
 
-                urlParts.query = {}; // deleting it would cause errors in mw.Uri()
                 if (urlObj.lang) {
-                  urlParts.query.lang = urlObj.lang;
+                    urlParts.query.lang = urlObj.lang;
                 }
 
                 break;
@@ -323,7 +350,7 @@ class VegaWrapper2 {
                 if (!data.results || !Array.isArray(data.results.bindings)) {
                     throw new Error('SPARQL query result does not have "results.bindings"');
                 }
-                data = data.results.bindings.map(function (row) {
+                data = data.results.bindings.map(row => {
                     let key, result = {};
                     for (key in row) {
                         if (row.hasOwnProperty(key)) {
@@ -335,7 +362,7 @@ class VegaWrapper2 {
                 break;
             case 'tabular':
                 data = this.parseMWApiResponse(data).jsondata;
-                const fields = data.schema.fields.map(function (v) {
+                const fields = data.schema.fields.map(v => {
                     return v.name;
                 });
                 data = {
@@ -353,7 +380,7 @@ class VegaWrapper2 {
                 break;
             case 'map':
                 data = this.parseMWApiResponse(data).jsondata;
-                let metadata = this.getMetaData(data);
+                const metadata = this.getMetaData(data);
                 metadata[0].zoom = data.zoom;
                 metadata[0].latitude = data.latitude;
                 metadata[0].longitude = data.longitude;

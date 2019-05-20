@@ -482,7 +482,7 @@ describe('vegaWrapper2', function() {
             fail = function (url) {
                 expectError(function () {
                     return wrapper.objToUrl(url, {domain: 'domain.sec.org'});
-                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper._validateExternalService']);
+                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper2._overrideHostAndProtocol']);
             };
 
         it('error type', function () {
@@ -511,6 +511,7 @@ describe('vegaWrapper2', function() {
         it('wikirest', function () {
             // wikirest allows sub-domains, requires path to begin with "/api/"
             fail({ type: 'wikirest', wiki: 'sec.org' });
+            pass({ type: 'wikirest', path: 'abc' }, 'https://domain.sec.org/api/abc');
             pass({ type: 'wikirest', path: '/abc' }, 'https://domain.sec.org/api/abc');
             pass({ type: 'wikirest', wiki: 'sec.org', path: '/abc' }, 'https://sec.org/api/abc');
             pass({ type: 'wikirest', wiki: 'sec', path: '/abc' }, 'https://sec.org/api/abc');
@@ -523,8 +524,10 @@ describe('vegaWrapper2', function() {
             fail({ type: 'wikiraw', wiki: 'sec.org' });
             fail({ type: 'wikiraw', wiki: 'sec.org', a: 10 });
             fail({ type: 'wikiraw', wiki: 'asec.org', title: 'aaa' });
+            fail({ type: 'wikiraw', title: 'abc\x1Fxyz' });
             fail({ type: 'wikiraw', title: 'abc|xyz' });
             fail({ type: 'wikiraw', wiki: 'sec.org', title: 'abc|xyz' });
+            fail({ type: 'wikiraw', wiki: 'sec.org', title: '\x1Fxyz' });
             passWithCors({ type: 'wikiraw', title: 'abc' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
             passWithCors({ type: 'wikiraw', title: 'abc/xyz' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fxyz');
             passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'aaa' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
@@ -536,6 +539,8 @@ describe('vegaWrapper2', function() {
         });
 
         it('wikifile', function () {
+            fail({ type: 'wikifile', title: 'this|pic' });
+            fail({ type: 'wikifile', title: '\x1Fimg' });
             pass({ type: 'wikifile', title: 'Einstein_1921.jpg' }, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg');
             pass({ type: 'wikifile', title: 'Einstein_1921.jpg', width: 10 }, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg?width=10');
         });
@@ -558,9 +563,12 @@ describe('vegaWrapper2', function() {
             fail({ type: 'geoshape', host: 'asec.org', path: 'aaa' });
             fail({ type: 'geoshape', title: 'aaa' });
             fail({ type: 'geoshape', aquery: 1 });
-            pass({ type: 'geoshape', ids: 1 }, 'http://maps.nonsec.org/geoshape?ids=1');
-            pass({ type: 'geoshape', ids: 'a1,b4' }, 'http://maps.nonsec.org/geoshape?ids=a1%2Cb4');
-            pass({ type: 'geoshape', query: 1 }, 'http://maps.nonsec.org/geoshape?query=1');
+            fail({ type: 'geoshape', ids: 1 });
+            fail({ type: 'geoshape', ids: 'a1,b4' });
+            fail({ type: 'geoshape', query: 1 });
+            fail({ type: 'geoshape', query: '' });
+            pass({ type: 'geoshape', ids: ['Q10','Q24'] }, 'http://maps.nonsec.org/geoshape?ids=Q10%2CQ24');
+            pass({ type: 'geoshape', query: '1' }, 'http://maps.nonsec.org/geoshape?query=1');
         });
 
         it('geoline', function () {
@@ -571,9 +579,12 @@ describe('vegaWrapper2', function() {
             fail({ type: 'geoline', host: 'asec.org', path: 'aaa' });
             fail({ type: 'geoline', title: 'aaa' });
             fail({ type: 'geoline', aquery: 1 });
-            pass({ type: 'geoline', ids: 1 }, 'http://maps.nonsec.org/geoline?ids=1');
-            pass({ type: 'geoline', ids: 'a1,b4' }, 'http://maps.nonsec.org/geoline?ids=a1%2Cb4');
-            pass({ type: 'geoline', query: 1 }, 'http://maps.nonsec.org/geoline?query=1');
+            fail({ type: 'geoline', ids: 1 });
+            fail({ type: 'geoline', ids: 'a1,b4' });
+            fail({ type: 'geoline', query: 1 });
+            fail({ type: 'geoline', query: '' });
+            pass({ type: 'geoline', ids: ['Q10','Q24'] }, 'http://maps.nonsec.org/geoline?ids=Q10%2CQ24');
+            pass({ type: 'geoline', query: '1' }, 'http://maps.nonsec.org/geoline?query=1');
         });
 
         it('mapsnapshot', function () {
@@ -606,6 +617,7 @@ describe('vegaWrapper2', function() {
         });
     });
 
+    /*
     it('sanitize for type=open', function () {
         var pass = function (url, expected) {
                 const result = wrapper.objToUrl(url, {type: 'open', domain: 'domain.sec.org'});
@@ -614,7 +626,7 @@ describe('vegaWrapper2', function() {
             fail = function (url) {
                 expectError(function () {
                     return wrapper.objToUrl(url, {type: 'open', domain: 'domain.sec.org'});
-                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper._validateExternalService']);
+                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper2._overrideHostAndProtocol']);
             };
 
         fail({type:'wikiapi', a:1});
@@ -638,6 +650,7 @@ describe('vegaWrapper2', function() {
         fail({type:'https', path:'/w/Http page'});
         fail({type:'https', path:'/wiki/Http page', a:1});
     });
+    */
 
     describe('parseResponse', function () {
         var pass = function (expected, data, type, dontEncode) {
@@ -714,8 +727,7 @@ describe('vegaWrapper2', function() {
                 }],
                 fields: [{ name: 'fld1' }],
                 data: [{ fld1: 42 }]
-            },
-                {
+            }, {
                     jsondata: {
                         description: 'desc',
                         sources: 'src',
@@ -739,8 +751,7 @@ describe('vegaWrapper2', function() {
                     zoom: 3,
                 }],
                 data: "map"
-            },
-                {
+            }, {
                     jsondata: {
                         description: 'desc',
                         sources: 'src',
