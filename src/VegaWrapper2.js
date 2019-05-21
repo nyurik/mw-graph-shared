@@ -33,15 +33,10 @@ class VegaWrapper2 {
         this.validators = {};
 
         this.loader.sanitize = this.sanitize.bind(this);
-        this.loader.load = (uri, options) => {
-            return this.sanitize(uri, options)
-                .then(opt => {
-                    return this.loader.http(opt.href, options)
-                        .then(txt => {
-                            return this.parseResponse(txt, uri.type, options);
-                        });
-                });
-        }
+        this.loader.load = (uri, options) => 
+            this.sanitize(uri, options)
+                .then(opt => this.loader.http(opt.href, options))
+                .then(txt => this.parseResponse(txt, uri.type, options));
 
         // Prevent accidental use
         this.loader.file = () => { throw new Error('Disabled'); };
@@ -54,10 +49,7 @@ class VegaWrapper2 {
      * @return {Promise} The sanitized url is provided by the 'href' property. We never load file from local file system.
      */
     sanitize(uri, options) {
-        return new Promise(accept => {
-            //return
-            accept({href: this.objToUrl(uri, options), loadFile: false});
-        });
+        return Promise.resolve({href: this.objToUrl(uri, options), loadFile: false});
     }
 
     /**
@@ -110,10 +102,6 @@ class VegaWrapper2 {
         }
         urlParts.host = domains[0];
         urlParts.protocol = this.sanitizeHost(urlParts.host).protocol;
-        if (!this.testHost(protocol, urlParts.host)) {
-            throw new Error(protocol + ': URL must either be relative (' + protocol + '///...),'
-                + 'or use one of the allowed hosts: ' + JSON.stringify(urlObj));
-        }
     }
 
     /**
@@ -139,8 +127,18 @@ class VegaWrapper2 {
                 // {type: “wikiapi”, params: {action:”...”, ...} [, wiki: “en.wikipedia.org”]}
                 // Call to api.php - the *params* are converted into the url query string
                 // use *wiki* to designate the host
-                if(!urlObj.params || typeof urlObj.params !== 'object'){
+                if(!urlObj.params || typeof urlObj.params !== 'object') {
                     throw new Error('wikiapi: "params" should be an object');
+                }
+                if(Array.isArray(urlObj.params)) {
+                    throw new Error('wikiapi: "params" shouldn\'t be an array');
+                }
+                for(const [k,v] of Object.entries(urlObj.params)) {
+                    if(typeof v === 'object') {
+                        throw new Error('wikiapi: "params" value should be a literal (e.g. true, 123, "foo")');
+                    } else if(!v && v !== 0) { // remove item if value is false or empty string
+                        delete urlObj.params[k];
+                    }
                 }
                 Object.assign(urlParts.query, urlObj.params, {format: 'json', formatversion: '2'});
                 urlParts.pathname = '/w/api.php';
@@ -153,6 +151,9 @@ class VegaWrapper2 {
                 // The /api/... path is safe for GET requests
                 if (!urlObj.path) {
                     throw new Error('wikirest: url path can\'t be empty');
+                }
+                if(typeof urlObj.path !== 'string') {
+                    throw new Error('wikirest: url path should be a string');
                 }
                 urlParts.pathname = (urlObj.path.startsWith('/') ? '/api' : '/api/') + urlObj.path;
                 break;
@@ -233,6 +234,9 @@ class VegaWrapper2 {
                 this._overrideHostAndProtocol(urlParts, urlObj);
                 if (!urlObj.query) {
                     throw new Error('wikidatasparql: missing query parameter');
+                }
+                if(typeof urlObj.query !== 'string') {
+                    throw new Error('wikidatasparql: query should be a string');
                 }
                 urlParts.query = {query: urlObj.query};
                 urlParts.pathname = '/bigdata/namespace/wdq/sparql';

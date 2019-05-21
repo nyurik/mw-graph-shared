@@ -497,10 +497,23 @@ describe('vegaWrapper2', function() {
 
         it('wikiapi', function () {
             // wikiapi allows sub-domains
+            fail({ type: 'wikiapi', params: "bad" });
+            fail({ type: 'wikiapi', params: null });
+            fail({ type: 'wikiapi', params: { a: null } });
+            fail({ type: 'wikiapi', params: { a: {} } });
+            fail({ type: 'wikiapi', params: { a: { b: 2 } } });
+            fail({ type: 'wikiapi', params: [] });
+            fail({ type: 'wikiapi', params: [1,2,3] });
+            fail({ type: 'wikiapi', params: { a: [] } });
+            fail({ type: 'wikiapi', params: { a: [null] } });
+            fail({ type: 'wikiapi', params: { a: [1,2,3] } });
             fail({ type: 'wikiapi', wiki: 'sec.org', });
             fail({ type: 'wikiapi', wiki: 'sec.org', params: 'blah'});
             passWithCors({ type: 'wikiapi', params:{a: '1'} }, 'https://domain.sec.org/w/api.php?a=1&format=json&formatversion=2');
-            passWithCors({ type: 'wikiapi', wiki: 'sec.org', params:{a: 1} }, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', params:{a: ';,/?:@&=+$#'} }, 'https://domain.sec.org/w/api.php?a=%3B%2C%2F%3F%3A%40%26%3D%2B%24%23&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', params:{a: 'abc 123'} }, 'https://domain.sec.org/w/api.php?a=abc%20123&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec.org', params:{a: 0, str:''} }, 'https://sec.org/w/api.php?a=0&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec.org', params:{num: 1, str: 'foo', boolT: true, boolF: false} }, 'https://sec.org/w/api.php?num=1&str=foo&boolT=true&format=json&formatversion=2');
             passWithCors({ type: 'wikiapi', wiki: 'wikiapi.sec.org', params:{a: '1'} }, 'https://wikiapi.sec.org/w/api.php?a=1&format=json&formatversion=2');
             passWithCors({ type: 'wikiapi', wiki: 'sec', params:{a: '1'} }, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
             passWithCors({ type: 'wikiapi', wiki: 'nonsec.org', params:{a: 1} }, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
@@ -509,7 +522,7 @@ describe('vegaWrapper2', function() {
         });
 
         it('wikirest', function () {
-            // wikirest allows sub-domains, requires path to begin with "/api/"
+            // wikirest allows sub-domains
             fail({ type: 'wikirest', wiki: 'sec.org' });
             pass({ type: 'wikirest', path: 'abc' }, 'https://domain.sec.org/api/abc');
             pass({ type: 'wikirest', path: '/abc' }, 'https://domain.sec.org/api/abc');
@@ -550,9 +563,10 @@ describe('vegaWrapper2', function() {
             fail({ type: 'wikidatasparql', path: 'a' });
             fail({ type: 'wikidatasparql', a: 10 });
             fail({ type: 'wikidatasparql', aquery: 1 });
-            pass({ type: 'wikidatasparql', query: 1 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
-            pass({ type: 'wikidatasparql', path: 'aaa', query: 1 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
-            pass({ type: 'wikidatasparql', query: 1, blah: 2 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            fail({ type: 'wikidatasparql', query: 1 });
+            pass({ type: 'wikidatasparql', query: '1' }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            pass({ type: 'wikidatasparql', path: 'aaa', query: '1' }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            pass({ type: 'wikidatasparql', query: '1', blah: 2 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
         });
 
         it('geoshape', function () {
@@ -565,6 +579,11 @@ describe('vegaWrapper2', function() {
             fail({ type: 'geoshape', aquery: 1 });
             fail({ type: 'geoshape', ids: 1 });
             fail({ type: 'geoshape', ids: 'a1,b4' });
+            fail({ type: 'geoshape', ids: {} });
+            fail({ type: 'geoshape', ids: [] });
+            fail({ type: 'geoshape', ids: [{}] });
+            fail({ type: 'geoshape', ids: [1] });
+            fail({ type: 'geoshape', ids: ['Q0'] });
             fail({ type: 'geoshape', query: 1 });
             fail({ type: 'geoshape', query: '' });
             pass({ type: 'geoshape', ids: ['Q10','Q24'] }, 'http://maps.nonsec.org/geoshape?ids=Q10%2CQ24');
@@ -728,14 +747,14 @@ describe('vegaWrapper2', function() {
                 fields: [{ name: 'fld1' }],
                 data: [{ fld1: 42 }]
             }, {
-                    jsondata: {
-                        description: 'desc',
-                        sources: 'src',
-                        license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
-                        schema: { fields: [{ name: 'fld1' }] },
-                        data: [[42]]
-                    },
-                }, 'tabular');
+                jsondata: {
+                    description: 'desc',
+                    sources: 'src',
+                    license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
+                    schema: { fields: [{ name: 'fld1' }] },
+                    data: [[42]]
+                },
+            }, 'tabular');
         });
 
         it('map', function () {
@@ -752,16 +771,16 @@ describe('vegaWrapper2', function() {
                 }],
                 data: "map"
             }, {
-                    jsondata: {
-                        description: 'desc',
-                        sources: 'src',
-                        license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
-                        longitude: 10,
-                        latitude: 20,
-                        zoom: 3,
-                        data: "map"
-                    },
-                }, 'map');
+                jsondata: {
+                    description: 'desc',
+                    sources: 'src',
+                    license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
+                    longitude: 10,
+                    latitude: 20,
+                    zoom: 3,
+                    data: "map"
+                },
+            }, 'map');
         });
     });
 
