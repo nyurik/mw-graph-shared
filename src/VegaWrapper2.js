@@ -133,7 +133,8 @@ class VegaWrapper2 {
                 if(Array.isArray(urlObj.params)) {
                     throw new Error('wikiapi: "params" shouldn\'t be an array');
                 }
-                for(const [k,v] of Object.entries(urlObj.params)) {
+                for(const k of Object.keys(urlObj.params)) {
+                    const v = urlObj.params[k];
                     if(typeof v === 'object') {
                         throw new Error('wikiapi: "params" value should be a literal (e.g. true, 123, "foo")');
                     } else if(!v && v !== 0) { // remove item if value is false or empty string
