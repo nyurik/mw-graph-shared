@@ -1,3 +1,5 @@
+LITERAL_TYPES = new Set(['number', 'boolean', 'string']);
+
 const makeValidator = require('domain-validator'),
       parseWikidataValue = require('wd-type-parser');
 
@@ -111,10 +113,11 @@ class VegaWrapper2 {
      * @returns {string} a complete url
      */
     objToUrl(urlObj, options) {
-        const sanitizedHost = this.sanitizeHost(urlObj.wiki ? urlObj.wiki : options.domain);
+        const host = urlObj.wiki ? urlObj.wiki : options.domain;
+        const sanitizedHost = this.sanitizeHost(host);
 
         if (!sanitizedHost) {
-            throw new Error('URL hostname is not whitelisted: ' + urlParts.host);
+            throw new Error('URL hostname is not whitelisted: ' + host);
         }
         const urlParts = {
             host: sanitizedHost.host,
@@ -127,17 +130,16 @@ class VegaWrapper2 {
                 // {type: “wikiapi”, params: {action:”...”, ...} [, wiki: “en.wikipedia.org”]}
                 // Call to api.php - the *params* are converted into the url query string
                 // use *wiki* to designate the host
-                if(!urlObj.params || typeof urlObj.params !== 'object') {
+                if(!urlObj.params || typeof urlObj.params !== 'object' || Array.isArray(urlObj.params)) {
                     throw new Error('wikiapi: "params" should be an object');
-                }
-                if(Array.isArray(urlObj.params)) {
-                    throw new Error('wikiapi: "params" shouldn\'t be an array');
                 }
                 for(const k of Object.keys(urlObj.params)) {
                     const v = urlObj.params[k];
-                    if(typeof v === 'object') {
+                    if(!LITERAL_TYPES.has(typeof v)) {
                         throw new Error('wikiapi: "params" value should be a literal (e.g. true, 123, "foo")');
-                    } else if(!v && v !== 0) { // remove item if value is false or empty string
+                    } else if(v === true) { // replace with 1
+                        urlObj.params[k] = 1;
+                    } else if(v === false) { // remove item if value is false
                         delete urlObj.params[k];
                     }
                 }
@@ -150,11 +152,8 @@ class VegaWrapper2 {
                 // {type: “wikirest”, path: “/rest_v1/page/...” [, wiki: “en.wikipedia.org”]}
                 // Call to RESTbase api - will add "/api" in front of *path* automatically
                 // The /api/... path is safe for GET requests
-                if (!urlObj.path) {
-                    throw new Error('wikirest: url path can\'t be empty');
-                }
-                if(typeof urlObj.path !== 'string') {
-                    throw new Error('wikirest: url path should be a string');
+                if(!urlObj.path || typeof urlObj.path !== 'string') {
+                    throw new Error('wikirest: url path should be a non-empty string without the /api prefix');
                 }
                 urlParts.pathname = (urlObj.path.startsWith('/') ? '/api' : '/api/') + urlObj.path;
                 break;
@@ -191,11 +190,11 @@ class VegaWrapper2 {
                 // is no pipe symbol or \x1F and the title ends with .tab or .map
                 if (urlObj.type === 'map') {
                     if (!/^[^|\x1F]+\.map$/.test(urlObj.title)) {
-                        throw new Error('map: invalid title' + JSON.stringify(urlObj));
+                        throw new Error(`map: invalid title ${JSON.stringify(urlObj)}, can't contain pipe symbol, must end with .map`);
                     }
                 } 
                 else if(!/^[^|\x1F]+\.tab$/.test(urlObj.title)) {
-                    throw new Error('tabular: invalid title' + JSON.stringify(urlObj));
+                    throw new Error(`tabular: invalid title ${JSON.stringify(urlObj)}, can't contain pipe symbol, must end with .tab`);
                 }
                 urlParts.query = {
                     format: 'json',
@@ -255,18 +254,26 @@ class VegaWrapper2 {
                     throw new Error(urlObj.type + ' missing ids or query parameter in: ' + JSON.stringify(urlObj));
                 }
                 if(urlObj.ids) {
-                    const ids = urlObj.ids;
-                    if(ids.length !== 2 || // is an array of length 2
-                        !/^Q[1-9][0-9]{0,15}$/.test(ids[0]) || !/^Q[1-9][0-9]{0,15}$/.test(ids[1])) {
-                        throw new Error(urlObj.type + ': invalid ids - ' + JSON.stringify(urlObj));
+                    let ids = urlObj.ids;
+                    if (typeof ids === 'string') {
+                        // allow ids to be a string with a single wikidata ID (convert it to an array)
+                        ids = [ids];
+                    } else if (!Array.isArray(ids) || ids.length < 1 || ids.length > 1000) {
+                        throw new Error(`ids must be an non-empty array of Wikidata IDs with no more than 1000 items`);
                     }
+                    ids.forEach(val => {
+                        if (!/^Q[1-9][0-9]{0,15}$/.test(val)) {
+                            throw new Error(`Invalid Wikidata ID ${JSON.stringify(val)}`);
+                        }
+                    });
                     urlParts.query.ids = ids.join(',');
-                }
-                else {
-                    if(!urlObj.query || typeof urlObj.query !== 'string') {
+                } else if(urlObj.query) {
+                    if(typeof urlObj.query !== 'string') {
                         throw new Error(urlObj.type + ': query should be a non-empty string\n' + JSON.stringify(urlObj));
                     }
                     urlParts.query.query = urlObj.query;
+                } else {
+                    throw new Error(urlObj.type + 'requires either ids or query parameter');
                 }
                 urlParts.pathname = '/' + urlObj.type;
                 break;
@@ -374,8 +381,8 @@ class VegaWrapper2 {
                     meta: this.getMetaData(data),
                     fields: data.schema.fields,
                     data: data.data.map(v => {
-                        let row = {}, i;
-                        for (i = 0; i < fields.length; i++) {
+                        const row = {};
+                        for (let i = 0; i < fields.length; i++) {
                             // Need to copy nulls too -- Vega has no easy way to test for undefined
                             row[fields[i]] = v[i];
                         }
