@@ -489,13 +489,13 @@ describe('vegaWrapper2', function() {
             };
 
         it('error type', function () {
-            fail({}, 'Unknown protocol');
-            fail({ path: 'blah' }, 'Unknown protocol');
-            fail({ type: 'blah', title: 'MyPage' }, 'Unknown protocol');
-            fail({ type: 'nope', host: 'sec.org' }, 'Unknown protocol');
-            fail({ type: 'nope', host: 'sec' }, 'Unknown protocol');
-            fail({ type: 'https', host: 'sec.org' }, 'Unknown protocol');
-            fail({ type: 'https', host: 'sec' }, 'Unknown protocol');
+            fail({}, 'Unknown type parameter');
+            fail({ path: 'blah' }, 'Unknown type parameter');
+            fail({ type: 'blah', title: 'MyPage' }, 'Unknown type parameter');
+            fail({ type: 'nope', host: 'sec.org' }, 'Unknown type parameter');
+            fail({ type: 'nope', host: 'sec' }, 'Unknown type parameter');
+            fail({ type: 'https', host: 'sec.org' }, 'Unknown type parameter');
+            fail({ type: 'https', host: 'sec' }, 'Unknown type parameter');
         });
 
         it('wikiapi', function () {

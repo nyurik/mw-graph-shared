@@ -1,4 +1,4 @@
-LITERAL_TYPES = new Set(['number', 'boolean', 'string']);
+const LITERAL_TYPES = new Set(['number', 'boolean', 'string']);
 
 const makeValidator = require('domain-validator'),
       parseWikidataValue = require('wd-type-parser');
@@ -308,7 +308,7 @@ class VegaWrapper2 {
                 break;
 
             default:
-                throw new Error('Unknown protocol ' + urlObj.type);
+                throw new Error('Unknown type parameter ' + urlObj.type);
         }
 
         return this.formatUrl(urlParts, options);
@@ -374,9 +374,7 @@ class VegaWrapper2 {
                 break;
             case 'tabular':
                 data = this.parseMWApiResponse(data).jsondata;
-                const fields = data.schema.fields.map(v => {
-                    return v.name;
-                });
+                const fields = data.schema.fields.map(v => v.name);
                 data = {
                     meta: this.getMetaData(data),
                     fields: data.schema.fields,
