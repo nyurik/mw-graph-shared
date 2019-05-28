@@ -4,7 +4,8 @@ var assert = require('assert'),
     _ = require('underscore'),
     util = require('util'),
     urllib = require('url'),
-    VegaWrapper = require('../src/VegaWrapper');
+    VegaWrapper = require('../src/VegaWrapper'),
+    VegaWrapper2 = require('../src/VegaWrapper2');
 
 describe('vegaWrapper', function() {
 
@@ -308,7 +309,7 @@ describe('vegaWrapper', function() {
         fail('https:///wiki/Http%20page?a=1');
     });
 
-    it('dateParser', function () {
+    it('dataParser', function () {
             var wrapper = createWrapper(),
                 pass = function (expected, data, graphProtocol, dontEncode) {
                     assert.deepStrictEqual(
@@ -415,5 +416,375 @@ describe('vegaWrapper', function() {
                 }, 'map:');
         }
     );
+
+});
+
+describe('vegaWrapper2', function() {
+    function expectError(testFunc, msg, errFuncNames, errorMsg) {
+        var error, result;
+        msg = JSON.stringify(msg);
+        try {
+            result = testFunc();
+        } catch (err) {
+            if(err.message.indexOf(errorMsg) === -1) {
+                throw err;
+            }
+            error = err;
+        }
+
+        if (!error) {
+            assert(false, util.format('%j was expected to cause an error in functions %j, but returned %j',
+                msg, errFuncNames, result));
+        }
+
+        if (error.stack.split('\n').map(function (v) {
+                return v.trim().split(' ');
+            }).filter(function (v) {
+                return v[0] === 'at';
+            })[0][1] in errFuncNames
+        ) {
+            // If first stack line (except the possibly multiline message) is not expected function, throw
+            error.message = '"' + msg + '" caused an error:\n' + error.message;
+            throw error;
+        }
+    }
+
+    var domains = {
+        http: ['nonsec.org'],
+        https: ['sec.org'],
+        wikiapi: ['wikiapi.nonsec.org', 'wikiapi.sec.org'],
+        wikirest: ['wikirest.nonsec.org', 'wikirest.sec.org'],
+        wikiraw: ['wikiraw.nonsec.org', 'wikiraw.sec.org'],
+        wikidatasparql: ['wikidatasparql.nonsec.org', 'wikidatasparql.sec.org'],
+        geoshape: ['maps.nonsec.org', 'maps.sec.org']
+    };
+    var domainMap = {
+        'nonsec': 'nonsec.org',
+        'sec': 'sec.org'
+    };
+
+    var wrapper = new VegaWrapper2({
+            loader: {},
+            domains: domains,
+            domainMap: domainMap,
+            logger: function (msg) { throw new Error(msg); },
+            formatUrl: urllib.format,
+            languageCode: 'en'
+        });
+
+    describe('sanitize', function () {
+        var pass = function (url, expected, addCorsOrigin) {
+                var opt = {domain: 'domain.sec.org'};
+                const result = wrapper.objToUrl(url, opt);
+                assert.equal(result, expected, JSON.stringify(url));
+                assert.equal(opt.addCorsOrigin, addCorsOrigin, 'addCorsOrigin');
+            },
+            passWithCors = function (url, expected) {
+                pass(url, expected, true);
+            },
+            fail = function (url, errorMsg) {
+                expectError(function () {
+                    return wrapper.objToUrl(url, {domain: 'domain.sec.org'});
+                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper2._overrideHostAndProtocol'], errorMsg);
+            };
+
+        it('error type', function () {
+            fail({}, 'Unknown type parameter');
+            fail({ path: 'blah' }, 'Unknown type parameter');
+            fail({ type: 'blah', title: 'MyPage' }, 'Unknown type parameter');
+            fail({ type: 'nope', host: 'sec.org' }, 'Unknown type parameter');
+            fail({ type: 'nope', host: 'sec' }, 'Unknown type parameter');
+            fail({ type: 'https', host: 'sec.org' }, 'Unknown type parameter');
+            fail({ type: 'https', host: 'sec' }, 'Unknown type parameter');
+        });
+
+        it('wikiapi', function () {
+            // wikiapi allows sub-domains
+            fail({ type: 'wikiapi', params: 'bad' }, 'should be an object');
+            fail({ type: 'wikiapi', params: null }, 'should be an object');
+            fail({ type: 'wikiapi', params: { a: null } }, 'value should be a literal');
+            fail({ type: 'wikiapi', params: { a: {} } }, 'value should be a literal');
+            fail({ type: 'wikiapi', params: { a: { b: 2 } } }, 'value should be a literal');
+            fail({ type: 'wikiapi', params: [] }, 'should be an object');
+            fail({ type: 'wikiapi', params: [1,2,3] }, 'should be an object');
+            fail({ type: 'wikiapi', params: { a: [] } }, 'value should be a literal');
+            fail({ type: 'wikiapi', params: { a: [null] } }, 'value should be a literal');
+            fail({ type: 'wikiapi', params: { a: [1,2,3] } }, 'value should be a literal');
+            fail({ type: 'wikiapi', wiki: 'sec.org', }, 'should be an object');
+            fail({ type: 'wikiapi', wiki: 'sec.org', params: 'blah'}, 'should be an object');
+            passWithCors({ type: 'wikiapi', params:{a: '1'} }, 'https://domain.sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', params:{a: ';,/?:@&=+$#'} }, 'https://domain.sec.org/w/api.php?a=%3B%2C%2F%3F%3A%40%26%3D%2B%24%23&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', params:{a: 'abc 123'} }, 'https://domain.sec.org/w/api.php?a=abc%20123&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec.org', params:{a: 0, str:''} }, 'https://sec.org/w/api.php?a=0&str=&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec.org', params:{num: 1, str: 'foo', boolT: true, boolF: false} }, 'https://sec.org/w/api.php?num=1&str=foo&boolT=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'wikiapi.sec.org', params:{a: '1'} }, 'https://wikiapi.sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'sec', params:{a: '1'} }, 'https://sec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'nonsec.org', params:{a: 1} }, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'wikiapi.nonsec.org', params:{a: '1'} }, 'http://wikiapi.nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+            passWithCors({ type: 'wikiapi', wiki: 'nonsec', params:{a: '1'} }, 'http://nonsec.org/w/api.php?a=1&format=json&formatversion=2');
+        });
+
+        it('wikirest', function () {
+            // wikirest allows sub-domains
+            fail({ type: 'wikirest', wiki: 'sec.org' }, 'wikirest: url path should be a non-empty string');
+            pass({ type: 'wikirest', path: 'abc' }, 'https://domain.sec.org/api/abc');
+            pass({ type: 'wikirest', path: '/abc' }, 'https://domain.sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'sec.org', path: '/abc' }, 'https://sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'sec', path: '/abc' }, 'https://sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'wikirest.sec.org', path: '/abc' }, 'https://wikirest.sec.org/api/abc');
+            pass({ type: 'wikirest', wiki: 'wikirest.nonsec.org', path: '/abc' }, 'http://wikirest.nonsec.org/api/abc');
+        });
+
+        it('wikiraw', function () {
+            // wikiraw allows sub-domains
+            fail({ type: 'wikiraw', wiki: 'sec.org' }, 'wikiraw: invalid title');
+            fail({ type: 'wikiraw', wiki: 'sec.org', a: 10 }, 'wikiraw: invalid title');
+            fail({ type: 'wikiraw', wiki: 'asec.org', title: 'aaa' }, 'URL hostname is not whitelisted');
+            fail({ type: 'wikiraw', title: 'abc\x1Fxyz' }, 'wikiraw: invalid title');
+            fail({ type: 'wikiraw', title: 'abc|xyz' }, 'wikiraw: invalid title');
+            fail({ type: 'wikiraw', wiki: 'sec.org', title: 'abc|xyz' }, 'wikiraw: invalid title');
+            fail({ type: 'wikiraw', wiki: 'sec.org', title: '\x1Fxyz' }, 'wikiraw: invalid title');
+            passWithCors({ type: 'wikiraw', title: 'abc' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
+            passWithCors({ type: 'wikiraw', title: 'abc/xyz' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fxyz');
+            passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'aaa' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
+            passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'aaa', a: 10 }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
+            passWithCors({ type: 'wikiraw', wiki: 'sec.org', title: 'abc/def' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fdef');
+            passWithCors({ type: 'wikiraw', wiki: 'sec', title: 'aaa' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=aaa');
+            passWithCors({ type: 'wikiraw', wiki: 'sec', title: 'abc/def' }, 'https://sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc%2Fdef');
+            passWithCors({ type: 'wikiraw', wiki: 'wikiraw.sec.org', title: 'abc' }, 'https://wikiraw.sec.org/w/api.php?format=json&formatversion=2&action=query&prop=revisions&rvprop=content&titles=abc');
+        });
+
+        it('wikifile', function () {
+            fail({ type: 'wikifile', title: 'this|pic' }, 'wikifile: invalid title');
+            fail({ type: 'wikifile', title: '\x1Fimg' }, 'wikifile: invalid title');
+            pass({ type: 'wikifile', title: 'Einstein_1921.jpg' }, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg');
+            pass({ type: 'wikifile', title: 'Einstein_1921.jpg', width: 10 }, 'https://domain.sec.org/wiki/Special:Redirect/file/Einstein_1921.jpg?width=10');
+        });
+
+        it('wikidatasparql', function () {
+            fail({ type: 'wikidatasparql'}, 'missing query parameter');
+            fail({ type: 'wikidatasparql', path: 'a' }, 'missing query parameter');
+            fail({ type: 'wikidatasparql', a: 10 }, 'missing query parameter');
+            fail({ type: 'wikidatasparql', aquery: 1 }, 'missing query parameter');
+            fail({ type: 'wikidatasparql', query: 1 }, 'query should be a string');
+            pass({ type: 'wikidatasparql', query: '1' }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            pass({ type: 'wikidatasparql', path: 'aaa', query: '1' }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+            pass({ type: 'wikidatasparql', query: '1', blah: 2 }, 'http://wikidatasparql.nonsec.org/bigdata/namespace/wdq/sparql?query=1');
+        });
+
+        it('geoshape', function () {
+            fail({ type: 'geoshape'}, 'missing ids or query parameter');
+            fail({ type: 'geoshape', a: 10 }, 'missing ids or query parameter');
+            fail({ type: 'geoshape', host: 'sec.org', path: '/a' }, 'missing ids or query parameter');
+            fail({ type: 'geoshape', host: 'sec.org', title: 'a' }, 'missing ids or query parameter');
+            fail({ type: 'geoshape', host: 'asec.org', path: 'aaa' }, 'missing ids or query parameter');
+            fail({ type: 'geoshape', title: 'aaa' }, 'missing ids or query parameter');
+            fail({ type: 'geoshape', aquery: 1 }, 'missing ids or query parameter');
+            fail({ type: 'geoshape', ids: 1 }, 'ids must be an non-empty array of Wikidata IDs');
+            fail({ type: 'geoshape', ids: 'a1,b4' }, 'Invalid Wikidata ID');
+            fail({ type: 'geoshape', ids: {} }, 'ids must be an non-empty array of Wikidata IDs');
+            fail({ type: 'geoshape', ids: [] }, 'ids must be an non-empty array of Wikidata IDs');
+            fail({ type: 'geoshape', ids: [{}] }, 'Invalid Wikidata ID');
+            fail({ type: 'geoshape', ids: [1] }, 'Invalid Wikidata ID');
+            fail({ type: 'geoshape', ids: ['Q0'] }, 'Invalid Wikidata ID');
+            fail({ type: 'geoshape', query: 1 }, 'query should be a non-empty string');
+            fail({ type: 'geoshape', query: '' }, 'missing ids or query parameter');
+            pass({ type: 'geoshape', ids: ['Q10','Q24'] }, 'http://maps.nonsec.org/geoshape?ids=Q10%2CQ24');
+            pass({ type: 'geoshape', query: '1' }, 'http://maps.nonsec.org/geoshape?query=1');
+        });
+
+        it('geoline', function () {
+            fail({ type: 'geoline', host: 'sec.org' }, 'missing ids or query parameter');
+            fail({ type: 'geoline', a: 10 }, 'missing ids or query parameter');
+            fail({ type: 'geoline', host: 'sec.org', path: '/a' }, 'missing ids or query parameter');
+            fail({ type: 'geoline', host: 'sec.org', title: 'a' }, 'missing ids or query parameter');
+            fail({ type: 'geoline', host: 'asec.org', path: 'aaa' }, 'missing ids or query parameter');
+            fail({ type: 'geoline', title: 'aaa' }, 'missing ids or query parameter');
+            fail({ type: 'geoline', aquery: 1 }, 'missing ids or query parameter');
+            fail({ type: 'geoline', ids: 1 }, 'ids must be an non-empty array of Wikidata IDs');
+            fail({ type: 'geoline', ids: 'a1,b4' }, 'Invalid Wikidata ID');
+            fail({ type: 'geoline', query: 1 }, 'query should be a non-empty string');
+            fail({ type: 'geoline', query: '' }, 'missing ids or query parameter');
+            pass({ type: 'geoline', ids: ['Q10','Q24'] }, 'http://maps.nonsec.org/geoline?ids=Q10%2CQ24');
+            pass({ type: 'geoline', query: '1' }, 'http://maps.nonsec.org/geoline?query=1');
+        });
+
+        it('mapsnapshot', function () {
+            fail({ type: 'mapsnapshot' }, 'parameter width is not set');
+            fail({ type: 'mapsnapshot', width: 100 }, 'parameter height is not set');
+            fail({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: '@4' }, 'if style is given, it must be letters/numbers/dash/underscores only');
+            fail({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: 'a$b' }, 'if style is given, it must be letters/numbers/dash/underscores only');
+            fail({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, lang: 'a$b' }, 'if lang is given, it must be letters/numbers/dash/underscores only');
+            pass({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5 }, 'http://maps.nonsec.org/img/osm-intl,5,10,10,100x100@2x.png');
+            pass({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: 'osm' }, 'http://maps.nonsec.org/img/osm,5,10,10,100x100@2x.png');
+            pass({ type: 'mapsnapshot', width: 100, height: 100, lat: 10, lon: 10, zoom: 5, style: 'osm', lang: 'local' }, 'http://maps.nonsec.org/img/osm,5,10,10,100x100@2x.png?lang=local');
+        });
+
+        it('tabular', function () {
+            fail({ type: 'tabular' }, 'invalid title');
+            fail({ type: 'tabular', a: 10 }, 'invalid title');
+            fail({ type: 'tabular', title: 'abc|xyz.tab' }, 'invalid title');
+            passWithCors({ type: 'tabular', title: 'abc.tab' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.tab&uselang=en');
+            passWithCors({ type: 'tabular', title: 'abc/xyz.tab' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fxyz.tab&uselang=en');
+            passWithCors({ type: 'tabular', title: 'aaa.tab', a: 10 }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.tab&uselang=en');
+        });
+
+        it('map', function () {
+            fail({ type: 'map' }, 'invalid title');
+            fail({ type: 'map', a: 10 }, 'invalid title');
+            fail({ type: 'map', title: 'abc|xyz.map' }, 'invalid title');
+            passWithCors({ type: 'map', title: 'abc.map' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc.map&uselang=en');
+            passWithCors({ type: 'map', title: 'abc/xyz.map' }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=abc%2Fxyz.map&uselang=en');
+            passWithCors({ type: 'map', title: 'aaa.map', a: 10 }, 'https://domain.sec.org/w/api.php?format=json&formatversion=2&action=jsondata&title=aaa.map&uselang=en');
+        });
+    });
+
+    /*
+    it('sanitize for type=open', function () {
+        var pass = function (url, expected) {
+                const result = wrapper.objToUrl(url, {type: 'open', domain: 'domain.sec.org'});
+                assert.equal(result, expected, JSON.stringify(url));
+            },
+            fail = function (url) {
+                expectError(function () {
+                    return wrapper.objToUrl(url, {type: 'open', domain: 'domain.sec.org'});
+                }, url, ['VegaWrapper2.objToUrl', 'VegaWrapper2._overrideHostAndProtocol']);
+            };
+
+        fail({type:'wikiapi', a:1});
+        fail({type:'wikirest', path:'/abc'});
+        //fail('///My%20page?foo=1');
+
+        pass({type:'wikititle', path:'My page'}, 'https://domain.sec.org/wiki/My_page');
+        //pass('///My%20page', 'https://domain.sec.org/wiki/My_page');
+        pass({type:'wikititle', host:'sec.org', path:'My page'}, 'https://sec.org/wiki/My_page');
+        //pass('//my.sec.org/My%20page', 'https://my.sec.org/wiki/My_page');
+
+        // This is not a valid title, but it will get validated on the MW side
+        //pass('////My%20page', 'https://domain.sec.org/wiki/%2FMy_page');
+
+        pass({type:'http', path:'/wiki/Http page'}, 'https://domain.sec.org/wiki/Http_page');
+        pass({type:'https', path:'/wiki/Http page'}, 'https://domain.sec.org/wiki/Http_page');
+        pass({type:'http', host:'my.sec.org', path:'/wiki/Http page'}, 'https://my.sec.org/wiki/Http_page');
+        pass({type:'https', host:'my.sec.org', path:'/wiki/Http page'}, 'https://my.sec.org/wiki/Http_page');
+
+        fail({type:'http', path:'Http page'});
+        fail({type:'https', path:'/w/Http page'});
+        fail({type:'https', path:'/wiki/Http page', a:1});
+    });
+    */
+
+    describe('parseResponse', function () {
+        var pass = function (expected, data, type, dontEncode) {
+            assert.deepStrictEqual(
+                wrapper.parseResponse(
+                    dontEncode ? data : JSON.stringify(data),
+                    type),
+                expected)
+            },
+            fail = function (data, errorMsg, type) {
+                expectError(function () {
+                    return wrapper.parseResponse(JSON.stringify(data), type);
+                }, type, ['VegaWrapper2.parseResponse'], errorMsg);
+            };
+
+        it('dontEncode', function () {
+            pass(1, 1, 'test:', true);
+        });
+
+        it('wikiapi', function () {
+            fail({ error: 'blah' }, 'API error: "blah"', 'wikiapi');
+            pass({ blah: 1 }, { blah: 1 }, 'wikiapi');
+        });
+
+        it('wikiraw', function () {
+            fail({ error: 'blah' }, 'API error: "blah"', 'wikiraw');
+            fail({ blah: 1 }, 'Page content not available', 'wikiraw');
+            pass('blah', { query: { pages: [{ revisions: [{ content: 'blah' }] }] } }, 'wikiraw');
+        });
+
+        it('wikidatasparql', function () {
+            fail({ error: 'blah' }, 'SPARQL query result does not have "results.bindings"', 'wikidatasparql');
+            fail({ blah: 1 }, 'SPARQL query result does not have "results.bindings"', 'wikidatasparql');
+            fail({ results: false }, 'SPARQL query result does not have "results.bindings"', 'wikidatasparql');
+            fail({ results: { bindings: false } }, 'SPARQL query result does not have "results.bindings"', 'wikidatasparql');
+            fail({ results: { bindings: 100 } }, 'SPARQL query result does not have "results.bindings"', 'wikidatasparql');
+            pass([], { results: { bindings: [] } }, 'wikidatasparql');
+            pass([{ int: 42, float: 42.5, geo: [42, 144.5] }, { uri: 'Q42' }], {
+                results: {
+                    bindings: [{
+                        int: {
+                            type: 'literal',
+                            'datatype': 'http://www.w3.org/2001/XMLSchema#int',
+                            value: '42'
+                        },
+                        float: {
+                            type: 'literal',
+                            'datatype': 'http://www.w3.org/2001/XMLSchema#float',
+                            value: '42.5'
+                        },
+                        geo: {
+                            type: 'literal',
+                            'datatype': 'http://www.opengis.net/ont/geosparql#wktLiteral',
+                            value: 'Point(42 144.5)'
+                        }
+                    }, {
+                        uri: {
+                            type: 'uri',
+                            value: 'http://www.wikidata.org/entity/Q42'
+                        }
+                    }]
+                }
+            }, 'wikidatasparql');
+        });
+
+        it('tabular', function () {
+            pass({
+                meta: [{
+                    description: 'desc',
+                    license_code: 'CC0-1.0+',
+                    license_text: 'abc',
+                    license_url: 'URL',
+                    sources: 'src'
+                }],
+                fields: [{ name: 'fld1' }],
+                data: [{ fld1: 42 }]
+            }, {
+                jsondata: {
+                    description: 'desc',
+                    sources: 'src',
+                    license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
+                    schema: { fields: [{ name: 'fld1' }] },
+                    data: [[42]]
+                },
+            }, 'tabular');
+        });
+
+        it('map', function () {
+            pass({
+                meta: [{
+                    description: 'desc',
+                    license_code: 'CC0-1.0+',
+                    license_text: 'abc',
+                    license_url: 'URL',
+                    sources: 'src',
+                    longitude: 10,
+                    latitude: 20,
+                    zoom: 3,
+                }],
+                data: "map"
+            }, {
+                jsondata: {
+                    description: 'desc',
+                    sources: 'src',
+                    license: { code: 'CC0-1.0+', text: 'abc', url: 'URL' },
+                    longitude: 10,
+                    latitude: 20,
+                    zoom: 3,
+                    data: "map"
+                },
+            }, 'map');
+        });
+    });
 
 });
