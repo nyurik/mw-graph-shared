@@ -116,6 +116,9 @@ class VegaWrapper2 {
         const host = urlObj.wiki ? urlObj.wiki : options.domain;
         const sanitizedHost = this.sanitizeHost(host);
 
+        // Path to api.php, e.g. "/w" for Wikimedia projects.
+        const scriptPath = options.scriptPath !== undefined ? options.scriptPath : '/w'
+
         if (!sanitizedHost) {
             throw new Error('URL hostname is not whitelisted: ' + host);
         }
@@ -144,7 +147,7 @@ class VegaWrapper2 {
                     }
                 }
                 Object.assign(urlParts.query, urlObj.params, {format: 'json', formatversion: '2'});
-                urlParts.pathname = '/w/api.php';
+                urlParts.pathname = scriptPath + '/api.php';
                 options.addCorsOrigin = true;
                 break;
 
@@ -176,7 +179,7 @@ class VegaWrapper2 {
                     titles: urlObj.title
                 };
 
-                urlParts.pathname = '/w/api.php';
+                urlParts.pathname = scriptPath + '/api.php';
                 options.addCorsOrigin = true;
                 break;
 
@@ -206,7 +209,7 @@ class VegaWrapper2 {
                     urlParts.query.uselang = urlObj.lang || this.languageCode;
                 }
 
-                urlParts.pathname = '/w/api.php';
+                urlParts.pathname = scriptPath + '/api.php';
                 options.addCorsOrigin = true;
                 break;
 
