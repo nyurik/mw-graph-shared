@@ -1,6 +1,6 @@
 {
   "name": "mw-graph-shared",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Shared code for Wikipedia's Graph extension and Graphoid Service",
   "main": "index.js",
   "scripts": {
@@ -18,8 +18,8 @@
     "wd-type-parser": "^0.0.3"
   },
   "devDependencies": {
-    "underscore": "^1.9.0",
-    "mocha": "^5.2.0"
+    "underscore": "^1.13.6",
+    "mocha": "^10.2.0"
   },
   "license": "MIT",
   "bugs": "https://github.com/nyurik/mw-graph-shared/issues"

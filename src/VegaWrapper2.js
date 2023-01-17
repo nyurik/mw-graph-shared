@@ -109,7 +109,7 @@ class VegaWrapper2 {
     /**
      * convert the urlObj to a url string
      * @param {object} urlObj an object consists of type and essential parameters
-     * @param {object} options used to attach CORS infomation
+     * @param {object} options used to attach CORS information
      * @returns {string} a complete url
      */
     objToUrl(urlObj, options) {
